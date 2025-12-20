@@ -203,43 +203,139 @@ elif menu == "Modeling & Evaluation":
     st.subheader("📍 Perbandingan Model Klasifikasi")
 
     if st.session_state["tfidf_df"] is None or not st.session_state["labels"]:
-        st.warning("TF-IDF dan label belum tersedia")
+        st.warning("⚠️ TF-IDF dan label belum tersedia. Silakan lakukan preprocessing terlebih dahulu.")
     else:
-        from modeling.modeling import train_and_compare_models
+        # ==============================
+        # VALIDASI SEBELUM MODELING
+        # ==============================
+        st.markdown("### 📋 Validasi Data Sebelum Modeling")
+        
+        tfidf_data = st.session_state["tfidf_df"]
+        labels_data = st.session_state["labels"]
+        
+        # Hitung statistik
+        n_samples = len(tfidf_data)
+        unique_labels = sorted(list(set(labels_data))) # Sort agar urutan label konsisten
+        n_classes = len(unique_labels)
+        
+        # Tampilkan informasi
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Jumlah Sampel", n_samples)
+        with col2:
+            st.metric("Jumlah Kelas", n_classes)
+        with col3:
+            st.metric("Label", ", ".join(unique_labels))
+        
+        # Validasi data sederhana (Validation logic lengkap ada di modeling.py)
+        if n_samples < 5:
+            st.error("❌ **Data terlalu sedikit** (Min 5 sampel).")
+        elif n_classes < 2:
+            st.error("❌ **Hanya ada 1 jenis label**. Butuh minimal 2 variasi sentimen.")
+        else:
+            # DATA VALID → LANJUT MODELING
+            st.success("✅ **Data valid! Memulai proses training...**")
+            
+            # Tombol untuk memulai training agar user siap
+            if st.button("🚀 Mulai Training Model"):
+                
+                with st.spinner("⏳ Sedang melatih model (Naive Bayes, DT, RF, & Stacking)..."):
+                    try:
+                        # Import di dalam sini untuk menghindari circular import jika ada
+                        from modeling.modeling import train_and_compare_models
 
-        result = train_and_compare_models(
-            st.session_state["tfidf_df"],
-            st.session_state["labels"]
-        )
+                        result = train_and_compare_models(
+                            st.session_state["tfidf_df"],
+                            st.session_state["labels"]
+                        )
+                        
+                        # Jika hasil None (artinya error di dalam modeling.py)
+                        if result is None:
+                            st.error("❌ Terjadi kesalahan saat training. Cek console/terminal.")
+                            st.stop()
 
-        acc_df = result["accuracy_df"]
+                        acc_df = result["accuracy_df"]
 
-        # ==============================
-        # BAR CHART AKURASI
-        # ==============================
-        st.markdown("### 📊 Perbandingan Akurasi Model")
-        st.bar_chart(
-            acc_df.set_index("Model")
-        )
+                        # ==============================
+                        # BAR CHART AKURASI
+                        # ==============================
+                        st.markdown("### 📊 Perbandingan Akurasi Model")
+                        st.bar_chart(acc_df.set_index("Model"))
+                        
+                        # Tampilkan tabel dengan highlight
+                        st.markdown("### 📋 Detail Akurasi")
+                        
+                        def highlight_best(row):
+                            if row['Model'] == result['best_model']:
+                                return ['background-color: #d4edda; color: #155724; font-weight: bold'] * len(row)
+                            return [''] * len(row)
+                        
+                        st.dataframe(
+                            acc_df.style.apply(highlight_best, axis=1).format({"Accuracy": "{:.4f}"}),
+                            use_container_width=True
+                        )
 
-        # ==============================
-        # INFO MODEL TERBAIK
-        # ==============================
-        st.markdown("### 🏆 Model Terbaik")
-        st.write(
-            f"**{result['best_model']}** "
-            f"(Accuracy = {result['best_accuracy']:.4f})"
-        )
+                        # ==============================
+                        # INFO MODEL TERBAIK
+                        # ==============================
+                        st.markdown("---")
+                        st.markdown("### 🏆 Analisis Model Terbaik")
+                        
+                        best_model_name = result['best_model']
+                        best_acc = result['best_accuracy']
 
-        # ==============================
-        # CONFUSION MATRIX
-        # ==============================
-        st.markdown("### 🔢 Confusion Matrix")
-        st.dataframe(result["confusion_matrix"])
+                        # Logika Improvement Stacking
+                        base_models = ['Naive Bayes', 'Decision Tree', 'Random Forest']
+                        base_acc_list = []
+                        
+                        for model in base_models:
+                            if model in acc_df['Model'].values:
+                                val = acc_df.loc[acc_df['Model'] == model, 'Accuracy'].values[0]
+                                base_acc_list.append(val)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.info(f"**Model Pemenang:**\n# {best_model_name}")
+                        
+                        with col2:
+                            if best_model_name == 'Stacking' and base_acc_list:
+                                best_base = max(base_acc_list)
+                                improvement = best_acc - best_base
+                                if improvement > 0:
+                                    st.success(f"**Stacking Boost:**\n# +{improvement:.2%}")
+                                    st.caption("Peningkatan akurasi dibanding single model terbaik.")
+                                else:
+                                    st.warning("Stacking sama kuat dengan model terbaik.")
+                            else:
+                                st.metric("Akurasi Tertinggi", f"{best_acc:.2%}")
 
-        # ==============================
-        # CLASSIFICATION REPORT
-        # ==============================
-        st.markdown("### 📄 Classification Report")
-        st.text(result["classification_report"])
+                        # ==============================
+                        # CONFUSION MATRIX (DIPERBAIKI)
+                        # ==============================
+                        st.markdown("### 🔢 Confusion Matrix")
+                        
+                        # Ubah array menjadi DataFrame agar ada Labelnya
+                        cm_array = result["confusion_matrix"]
+                        cm_df = pd.DataFrame(
+                            cm_array, 
+                            index=[f"Actual {l}" for l in unique_labels], 
+                            columns=[f"Pred {l}" for l in unique_labels]
+                        )
+                        st.dataframe(cm_df, use_container_width=True)
 
+                        # ==============================
+                        # CLASSIFICATION REPORT (DIPERBAIKI)
+                        # ==============================
+                        st.markdown("### 📄 Classification Report")
+                        
+                        # Karena output modeling.py sekarang DICTIONARY, kita convert ke DataFrame
+                        report_dict = result["classification_report"]
+                        report_df = pd.DataFrame(report_dict).transpose()
+                        
+                        # Format angka agar rapi (2 desimal)
+                        st.dataframe(report_df.style.format("{:.2f}"), use_container_width=True)
+                        
+                    except Exception as e:
+                        st.error(f"❌ **ERROR Runtime:** {str(e)}")
+                        st.code(e) # Tampilkan kode error untuk debugging
