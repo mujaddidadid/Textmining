@@ -1,9 +1,4 @@
-# ==============================
-# LEXICON-BASED AUTOMATIC LABELING
-# ==============================
-
-# Kamus sentimen sederhana (Bahasa Indonesia)
-POSITIVE_WORDS = [
+POSITIVE_WORDS = {
     "bagus", "baik", "mantap", "hebat", "puas", "senang",
     "cepat", "ramah", "murah", "nyaman", "keren", "mantul", "memuaskan", "puasin", "terbaik", "unggul", "fantastis", "istimewa",
     "menakjubkan", "excellent", "awesome", "top", "bagus banget", "oke",
@@ -15,9 +10,9 @@ POSITIVE_WORDS = [
     "perfect", "paripurna", "flawless", "no complain", "no komplain", "mantep", "mantap jiwa", "top markotop", "jos", "josss", "joss",
     "gemes", "gemesh", "gemas", "kece", "keceh", "keren abis",
     "nendang", "nendang banget", "sip", "sipp", "oke sip", "huuh luar biasah"
-]
+}
 
-NEGATIVE_WORDS = [
+NEGATIVE_WORDS = {
     "buruk", "jelek", "lambat", "kecewa", "parah", "error",
     "rusak", "lama", "mahal", "ribet", "lemot",  "jelek banget", "buruk banget", "parah banget", "sangat buruk",
     "sangat jelek", "sangat kecewa", "sangat mengecewakan", "menyesal",
@@ -28,16 +23,16 @@ NEGATIVE_WORDS = [
     "mahal ga worth it", "mahal gak worth it","marah", "kesal", "jengkel", "kesel", "kecewa berat",
     "frustasi", "frustrated", "stress", "stres", "bete",
     "bad mood", "mood rusak", "sedih", "kecewa hati"
-]
+}
 
+# 2. FUNGSI LABELING
 
 def label_sentiment(text):
     """
-    Memberi label sentimen pada satu teks (hasil preprocessing)
+    Memberi label sentimen pada satu teks (string) yang sudah di-stemming.
     """
-
     score = 0
-    words = text.split()
+    words = text.split() 
 
     for word in words:
         if word in POSITIVE_WORDS:
@@ -52,12 +47,11 @@ def label_sentiment(text):
     else:
         return "Netral"
 
-
 def label_corpus(text_list):
     """
-    Memberi label sentimen pada banyak teks
+    Memberi label sentimen pada banyak teks (list of strings).
+    Output: List label ["Positif", "Negatif", ...]
     """
-
     labels = []
     for text in text_list:
         label = label_sentiment(text)
