@@ -27,7 +27,7 @@ NEGATIVE_WORDS = [
     "tidak worth", "tidak worth it", "rugi", "merugi", "kemahalan",
     "mahal ga worth it", "mahal gak worth it","marah", "kesal", "jengkel", "kesel", "kecewa berat",
     "frustasi", "frustrated", "stress", "stres", "bete",
-    "bad mood", "mood rusak", "sedih", "kecewa hati",
+    "bad mood", "mood rusak", "sedih", "kecewa hati"
 ]
 
 

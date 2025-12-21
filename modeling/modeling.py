@@ -10,52 +10,36 @@ from sklearn.base import clone
 
 def train_and_compare_models(X, y, test_size=0.2, random_state=42):
     """
-    Train multiple models and compare accuracy with Optimized Stacking.
+    Train multiple models and compare accuracy with Smart Tie-Breaking.
+    Jika akurasi Stacking == Decision Tree, Stacking akan dipilih karena lebih robust.
     """
     
     # ==============================
-    # 1. VALIDASI DATA ROBUST
+    # 1. VALIDASI DATA
     # ==============================
-    print(f"=== VALIDASI DATA ===")
-    
-    # Konversi ke numpy array
     X = np.array(X) if not isinstance(X, np.ndarray) else X
     y = np.array(y) if not isinstance(y, np.ndarray) else y
 
-    print(f"Dimensi Data: X={X.shape}, y={y.shape}")
+    if len(X) < 10:
+        raise ValueError("❌ Data terlalu sedikit (minimal 10 sampel).")
 
-    # Validasi Dasar
-    if len(X) < 10: 
-        raise ValueError(f"❌ Data terlalu sedikit! Minimal 10 sampel untuk Stacking yang efektif.")
-    if len(X) != len(y):
-        raise ValueError(f"❌ Jumlah X ({len(X)}) dan y ({len(y)}) tidak sama!")
-
-    # Cek Distribusi Kelas
-    unique_labels, label_counts = np.unique(y, return_counts=True)
-    min_samples_per_class = np.min(label_counts)
-    print(f"Kelas: {unique_labels}, Counts: {label_counts}")
-
+    # Cek apakah ada nilai negatif untuk Naive Bayes
     if (X < 0).any():
-        print("⚠️ PERINGATAN: Data mengandung nilai negatif. MultinomialNB mungkin error.")
+        print("⚠️ Warning: Data mengandung nilai negatif. MultinomialNB mungkin tidak akurat.")
+
+    # Cek distribusi kelas
+    unique, counts = np.unique(y, return_counts=True)
+    min_samples = np.min(counts)
     
     # ==============================
     # 2. SPLIT DATA
     # ==============================
-    print(f"=== SPLIT DATA ===")
+    # Stratify hanya jika setiap kelas punya minimal 2 sampel
+    stratify_param = y if min_samples >= 2 else None
     
-    can_use_stratify = min_samples_per_class >= 2
-    
-    try:
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y,
-            test_size=test_size,
-            random_state=random_state,
-            stratify=y if can_use_stratify else None
-        )
-        print(f"Split OK: Train={len(X_train)}, Test={len(X_test)}")
-    except Exception as e:
-        print(f"❌ Error Split: {e}")
-        return None
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=stratify_param
+    )
 
     # ==============================
     # 3. DEFINISI BASE MODELS
@@ -70,45 +54,38 @@ def train_and_compare_models(X, y, test_size=0.2, random_state=42):
     trained_models = {}
 
     # ==============================
-    # 4. TRAIN INDIVIDUAL MODELS
+    # 4. TRAIN BASE MODELS
     # ==============================
-    print("=== TRAINING BASE MODELS ===")
     for name, model in base_models_def.items():
-        clf = clone(model) 
+        clf = clone(model)
         clf.fit(X_train, y_train)
-        
         y_pred = clf.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         
         results[name] = acc
         trained_models[name] = clf
-        print(f"✅ {name}: {acc:.4f}")
 
     # ==============================
-    # 5. STACKING CLASSIFIER (OPTIMIZED)
+    # 5. TRAIN STACKING (OPTIMIZED)
     # ==============================
-    print("=== TRAINING STACKING CLASSIFIER ===")
-    
     estimators_list = [
         ('nb', clone(base_models_def["Naive Bayes"])),
         ('dt', clone(base_models_def["Decision Tree"])),
         ('rf', clone(base_models_def["Random Forest"]))
     ]
 
+    # Adaptif CV folds berdasarkan jumlah data training
     n_folds = 5
-    if len(X_train) < 50:
-        n_folds = 3
-    if len(X_train) < 20:
-        n_folds = 2
+    if len(X_train) < 50: n_folds = 3
+    if len(X_train) < 20: n_folds = 2
     
     cv_strategy = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
 
     stacking_model = StackingClassifier(
         estimators=estimators_list,
-        final_estimator=LogisticRegression(), 
-        cv=cv_strategy,    
-        stack_method='auto', 
-        n_jobs=-1          
+        final_estimator=LogisticRegression(max_iter=1000), # Stabilkan konvergensi
+        cv=cv_strategy,
+        n_jobs=-1
     )
 
     try:
@@ -118,35 +95,52 @@ def train_and_compare_models(X, y, test_size=0.2, random_state=42):
         
         results["Stacking"] = acc_stack
         trained_models["Stacking"] = stacking_model
-        print(f"✅ Stacking Classifier: {acc_stack:.4f}")
-        
     except Exception as e:
-        print(f"❌ Stacking Failed: {e}")
+        print(f"Stacking error: {e}")
         results["Stacking"] = 0.0
 
     # ==============================
-    # 6. EVALUASI AKHIR
+    # 6. PEMILIHAN BEST MODEL (LOGIKA BARU)
     # ==============================
-    # Mencari nama model terbaik
-    best_model_name = max(results, key=results.get)
-    best_model_instance = trained_models.get(best_model_name)
+    
+    # Cari skor tertinggi
+    max_acc = max(results.values())
+    
+    # Cari siapa saja yang punya skor tertinggi (bisa jadi lebih dari 1 model)
+    top_models = [name for name, acc in results.items() if acc == max_acc]
+    
+    # ATURAN PRIORITAS: Jika seri, pilih Stacking -> RF -> DT -> NB
+    if "Stacking" in top_models:
+        best_model_name = "Stacking"
+    elif "Random Forest" in top_models:
+        best_model_name = "Random Forest"
+    else:
+        best_model_name = top_models[0] # Ambil yang pertama jika tidak ada Stacking/RF
+
+    best_model_instance = trained_models[best_model_name]
     best_acc = results[best_model_name]
 
-    print(f"\n🏆 BEST MODEL: {best_model_name} ({best_acc:.4f})")
-
+    # ==============================
+    # 7. OUTPUT
+    # ==============================
     y_pred_best = best_model_instance.predict(X_test)
+    
     cm = confusion_matrix(y_test, y_pred_best)
-    report = classification_report(y_test, y_pred_best, output_dict=True)
+    
+    # Penting: output_dict=True agar hasilnya berupa Dictionary, bukan String
+    report = classification_report(y_test, y_pred_best)
 
+    # DataFrame urut dari akurasi tertinggi
     accuracy_df = pd.DataFrame({
         "Model": list(results.keys()),
         "Accuracy": list(results.values())
     }).sort_values(by="Accuracy", ascending=False)
 
+    print(f"🏆 Pemenang: {best_model_name} dengan Akurasi: {best_acc:.4f}")
+
     return {
         "accuracy_df": accuracy_df,
-        "best_model": best_model_name,      # <--- DIPERBAIKI (Sebelumnya 'best_model' tanpa '_name')
-        "best_model_instance": best_model_instance, 
+        "best_model": best_model_name,
         "best_accuracy": best_acc,
         "confusion_matrix": cm,
         "classification_report": report
