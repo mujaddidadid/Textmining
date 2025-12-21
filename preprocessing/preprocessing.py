@@ -3,7 +3,8 @@ import nltk
 
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
+# GANTI: Import Sastrawi Factory
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
 # ==============================
 # DOWNLOAD RESOURCE NLTK
@@ -15,8 +16,12 @@ nltk.download("stopwords")
 # ==============================
 # INISIALISASI
 # ==============================
-stemmer = PorterStemmer()
-stop_words = set(stopwords.words("english"))
+# GANTI: Inisialisasi Sastrawi Stemmer
+factory = StemmerFactory()
+stemmer = factory.create_stemmer()
+
+# GANTI: Menggunakan stopwords bahasa Indonesia agar cocok dengan Sastrawi
+stop_words = set(stopwords.words("indonesian"))
 
 # ==============================
 # 1. CASE FOLDING
@@ -47,9 +52,11 @@ def stopword_removal(tokens):
     return [word for word in tokens if word not in stop_words]
 
 # ==============================
-# 5. STEMMING
+# 5. STEMMING (SASTRAWI)
 # ==============================
 def stemming(tokens):
+    # Sastrawi sebenarnya bisa memproses kalimat langsung, 
+    # tapi untuk menjaga konsistensi input (list of tokens), kita loop per kata.
     return [stemmer.stem(word) for word in tokens]
 
 # ==============================
@@ -57,11 +64,23 @@ def stemming(tokens):
 # ==============================
 def preprocess_stepwise(text_list):
     original = text_list
+    
+    # 1. Case Folding
     casefolded = [case_folding(t) for t in original]
+    
+    # 2. Cleaning
     cleaned = [cleaning(t) for t in casefolded]
+    
+    # 3. Tokenizing
     tokenized = [tokenizing(t) for t in cleaned]
+    
+    # 4. Stopword Removal
     no_stopwords = [stopword_removal(t) for t in tokenized]
+    
+    # 5. Stemming (Proses ini mungkin agak lama karena Sastrawi kompleks)
     stemmed = [stemming(t) for t in no_stopwords]
+    
+    # Gabung kembali menjadi kalimat
     final_text = [" ".join(t) for t in stemmed]
 
     return {
