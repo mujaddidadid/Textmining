@@ -6,6 +6,8 @@ from preprocessing.preprocessing import preprocess_stepwise
 from labeling.lexicon_labeling import label_corpus
 from feature_Extraction.tfidf_extraction import tfidf_transform
 from modeling.modeling import train_and_compare_models
+from preprocessing.preprocessing import case_folding, cleaning, tokenizing, stopword_removal, stemming
+from modeling.sentiment_prediction import perform_prediction
 
 st.set_page_config(
     page_title="Text Mining",
@@ -172,7 +174,8 @@ with st.sidebar:
             "Data Preprocessing",
             "Pelabelan Otomatis",
             "Feature Extraction",
-            "Modeling & Evaluation"
+            "Modeling & Evaluation",
+            "Sentiment Prediction"
         )
     )
     
@@ -215,7 +218,7 @@ if menu == "Input Komentar":
         st.markdown("### Preview Raw Data")
         st.dataframe(pd.DataFrame({"Komentar": st.session_state["komentar"]}), use_container_width=True)
 
-# DATA PREPROCESSING (PERBAIKAN)
+# DATA PREPROCESSING 
 elif menu == "Data Preprocessing":
     st.subheader("Data Preprocessing")
 
@@ -274,6 +277,7 @@ elif menu == "Pelabelan Otomatis":
         st.markdown("#### Sentiment Distribution")
         st.bar_chart(df_label["Prediksi Sentimen"].value_counts())
 
+
 #  FEATURE EXTRACTION
 elif menu == "Feature Extraction":
     st.subheader("Feature Vectorization (TF-IDF)")
@@ -281,8 +285,13 @@ elif menu == "Feature Extraction":
     if not st.session_state["clean_text"]:
         st.warning("Feature Source Missing.")
     else:
-        tfidf_df, tfidf_scores, _ = tfidf_transform(st.session_state["clean_text"])
+        # PERBAIKAN: Tangkap variabel ketiga (vectorizer_obj) dari fungsi tfidf_transform
+        tfidf_df, tfidf_scores, vectorizer_obj = tfidf_transform(st.session_state["clean_text"])
+        
+        # SIMPAN KE SESSION STATE: Agar bisa dipanggil saat proses Save Pickle di menu Modeling
         st.session_state["tfidf_df"] = tfidf_df
+        st.session_state["vectorizer"] = vectorizer_obj 
+        
         st.markdown("#### Vector Matrix")
         st.dataframe(tfidf_df.iloc[:1000], use_container_width=True)
         st.markdown("---")
@@ -304,7 +313,8 @@ elif menu == "Feature Extraction":
             ax.axis("off")
             st.pyplot(fig)
 
-# MODELING & EVALUATION 
+
+#  MODELING & EVALUATION 
 elif menu == "Modeling & Evaluation":
     st.subheader("Model Benchmarking & Stacking")
 
@@ -313,12 +323,14 @@ elif menu == "Modeling & Evaluation":
     else:
         try:
             with st.spinner('Synchronizing Models & Running Cross-Validation...'):
+                # Menjalankan training model
                 result = train_and_compare_models(
                     st.session_state["tfidf_df"],
                     st.session_state["labels"]
                 )
 
             if result is not None:
+                # 1. Tampilan Dashboard Hasil (Tetap Sesuai Desain Anda)
                 st.markdown(f"""
                     <div style="background: rgba(0, 242, 254, 0.05); padding: 30px; border-radius: 20px; border: 1px solid #4facfe; text-align: center; margin-bottom:30px;">
                         <p style="color: #4facfe; font-family: Orbitron; margin:0;">OPTIMAL CLASSIFIER FOUND</p>
@@ -327,6 +339,23 @@ elif menu == "Modeling & Evaluation":
                     </div>
                 """, unsafe_allow_html=True)
 
+                # --- 2. IMPLEMENTASI OTOMATIS SIMPAN PICKLE ---
+                import pickle # Import library pickle
+                
+                # Menyimpan Model Terbaik ke file fisik .pkl
+                with open('best_model.pkl', 'wb') as f:
+                    pickle.dump(result['model_object'], f)
+                
+                # Menyimpan Vectorizer ke file fisik .pkl (diambil dari session_state)
+                if "vectorizer" in st.session_state:
+                    with open('vectorizer.pkl', 'wb') as f:
+                        pickle.dump(st.session_state["vectorizer"], f)
+                
+                # Menampilkan notifikasi sukses di UI
+                st.success("✅ Berhasil: Model (best_model.pkl) & Vectorizer (vectorizer.pkl) telah disimpan otomatis ke folder project.")
+                # ----------------------------------------------
+
+                # 3. Menampilkan Visualisasi Metrics (Tetap Sesuai Desain Anda)
                 st.markdown("### Hasil Metrics")
                 st.bar_chart(result["accuracy_df"].set_index("Model"))
 
@@ -336,7 +365,105 @@ elif menu == "Modeling & Evaluation":
                 st.markdown("#### Classification Report")
                 st.text(result["classification_report"])
             else:
-                st.error("Gagal melatih model. Pastikan jumlah sampel data mencukupi untuk proses Cross-Validation.")
+                st.error("Gagal melatih model. Pastikan jumlah sampel data mencukupi.")
 
         except Exception as e:
             st.error(f"Terjadi kesalahan saat pemrosesan model: {e}")
+
+#  SENTIMENT PREDICTION (MENGGUNAKAN PICKLE)
+elif menu == "Sentiment Prediction":
+    st.subheader("🔮 Analisis Sentimen Otomatis")
+
+    user_input = st.text_area("Masukkan komentar:", placeholder="Ketik di sini...")
+
+    # Panel opsi tampilan preprocessing
+    show_steps = st.checkbox("Tampilkan proses preprocessing (step-by-step)", value=True)
+
+    if st.button("Analisa Sekarang"):
+        if user_input:
+            with st.spinner('Menganalisa dengan Lexicon & Machine Learning...'):
+                # ==========================
+                # 1) TAMPILKAN PREPROCESSING STEP-BY-STEP (UI SAJA)
+                # ==========================
+                if show_steps:
+                    # Import fungsi preprocessing (sama seperti di perform_prediction)
+                    from preprocessing.preprocessing import (
+                        case_folding, cleaning, tokenizing, stopword_removal, stemming
+                    )
+
+                    # Jalankan step-by-step untuk ditampilkan di UI
+                    step_casefold = case_folding(user_input)
+                    step_cleaning = cleaning(step_casefold)
+                    step_tokens = tokenizing(step_cleaning)
+                    step_stopword = stopword_removal(step_tokens)
+                    step_stemming = stemming(step_stopword)
+                    final_cleaned_preview = " ".join(step_stemming)
+
+                # ==========================
+                # 2) PANGGIL FUNGSI UTAMA (JANGAN DIUBAH)
+                # ==========================
+                ml_res, lex_res, cleaned, error = perform_prediction(user_input)
+
+            if error:
+                st.error(f"Terjadi kesalahan: {error}")
+            else:
+                # ==========================
+                # 3) UI HASIL PREPROCESSING
+                # ==========================
+                if show_steps:
+                    st.markdown("### 🧼 Preprocessing (Step-by-step)")
+
+                    t1, t3 = st.tabs(["Tahapan", "Final Clean Text"])
+
+                    with t1:
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.write("**1. Case Folding**")
+                            st.code(step_casefold, language="text")
+                        with c2:
+                            st.write("**2. Cleaning (Lexicon Cleaning)**")
+                            st.code(step_cleaning, language="text")
+
+                        c3, c4 = st.columns(2)
+                        with c3:
+                            st.write("**3. Tokenizing**")
+                            st.write(step_tokens)
+                        with c4:
+                            st.write("**4. Stopword Removal**")
+                            st.write(step_stopword)
+
+                        st.divider()
+                        st.write("**5. Stemming (Sastrawi)**")
+                        st.caption("Mengubah kata berimbuhan menjadi kata dasar bahasa Indonesia.")
+                        st.write(step_stemming)
+
+                    
+
+                    with t3:
+                        st.success("Teks final yang siap untuk prediksi:")
+                        # gunakan "cleaned" dari perform_prediction agar benar-benar sama dengan pipeline prediksi
+                        st.code(cleaned, language="text")
+
+                # ==========================
+                # 4) UI HASIL PREDIKSI (UI LAMA KAMU)
+                # ==========================
+                warna = "#00ffaa" if ml_res == "Positif" else "#ff4b4b" if ml_res == "Negatif" else "#ffeb3b"
+
+                st.markdown(f"""
+                    <div style="padding:20px; border-radius:15px; border: 1px solid {warna}; background: rgba(255,255,255,0.05); text-align:center; margin-top:15px;">
+                        <h3 style="margin:0; font-family:Orbitron; color:#8892b0;">HASIL PREDIKSI MODEL</h3>
+                        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:12px;">
+                            <div style="padding:12px 16px; border-radius:12px; border:1px solid #334155;">
+                                <p style="margin:0; color:#8892b0; font-size:0.8rem;">Machine Learning</p>
+                                <h2 style="margin:6px 0 0; color:{warna}; font-family:Orbitron;">{ml_res}</h2>
+                            </div>
+                        </div>
+                        <hr style="border:0.5px solid #1e293b; margin:16px 0;">
+                        <p style="color:#8892b0; font-style:italic; font-size:0.85rem; margin:0;">" {cleaned} "</p>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        else:
+            st.warning("Silakan masukkan teks terlebih dahulu.")
+
+

@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier, StackingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from sklearn.base import clone
+import pickle
 
 def train_and_compare_models(X, y, test_size=0.2, random_state=42):
     """
@@ -89,7 +90,6 @@ def train_and_compare_models(X, y, test_size=0.2, random_state=42):
     
     # Cari skor tertinggi
     max_acc = max(results.values())
-    
     top_models = [name for name, acc in results.items() if acc == max_acc]
     
     if "Stacking" in top_models:
@@ -104,7 +104,6 @@ def train_and_compare_models(X, y, test_size=0.2, random_state=42):
 
     # 7. OUTPUT
     y_pred_best = best_model_instance.predict(X_test)
-    
     cm = confusion_matrix(y_test, y_pred_best)
     report = classification_report(y_test, y_pred_best)
 
@@ -113,12 +112,19 @@ def train_and_compare_models(X, y, test_size=0.2, random_state=42):
         "Accuracy": list(results.values())
     }).sort_values(by="Accuracy", ascending=False)
 
-    print(f"🏆 Pemenang: {best_model_name} dengan Akurasi: {best_acc:.4f}")
-
+    # Tambahkan best_model_instance ke dalam return dictionary agar bisa di-pickle di app.py
     return {
         "accuracy_df": accuracy_df,
         "best_model": best_model_name,
         "best_accuracy": best_acc,
         "confusion_matrix": cm,
-        "classification_report": report
+        "classification_report": report,
+        "model_object": best_model_instance # Tambahan untuk pickle
     }
+
+#menambahkan hasil model dari vectorizer 
+def save_model_pickle(model, vectorizer, model_path='best_model.pkl', vec_path='vectorizer.pkl'):
+    with open(model_path, 'wb') as f:
+        pickle.dump(model, f)
+    with open(vec_path, 'wb') as f:
+        pickle.dump(vectorizer, f)
