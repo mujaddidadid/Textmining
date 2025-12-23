@@ -1,36 +1,32 @@
-POSITIVE_WORDS = {
-    "bagus", "baik", "mantap", "hebat", "puas", "senang",
-    "cepat", "ramah", "murah", "nyaman", "keren", "mantul", "memuaskan", "puasin", "terbaik", "unggul", "fantastis", "istimewa",
-    "menakjubkan", "excellent", "awesome", "top", "bagus banget", "oke",
-    "ok", "okay", "wow", "wih", "alhamdulillah", "makasih", "terima kasih", "terjangkau", "murah meriah", "worth it", "worth", "worth the price",
-    "harga pas", "harga oke", "harga bersahabat", "promo", "diskon",
-    "gratis", "free", "murah banget", "murahnya", "happy", "bahagia", "seneng", "senangnya", "asyik", "enak", "legit",
-    "manis", "menyenangkan", "memuaskan", "sesuai harapan", "sangat baik", "sangat bagus", "sangat puas", "sangat membantu",
-    "super", "super", "fantastic", "amazing", "terlalu bagus",
-    "perfect", "paripurna", "flawless", "no complain", "no komplain", "mantep", "mantap jiwa", "top markotop", "jos", "josss", "joss",
-    "gemes", "gemesh", "gemas", "kece", "keceh", "keren abis",
-    "nendang", "nendang banget", "sip", "sipp", "oke sip", "huuh luar biasah"
-}
+import os
 
-NEGATIVE_WORDS = {
-    "buruk", "jelek", "lambat", "kecewa", "parah", "error",
-    "rusak", "lama", "mahal", "ribet", "lemot",  "jelek banget", "buruk banget", "parah banget", "sangat buruk",
-    "sangat jelek", "sangat kecewa", "sangat mengecewakan", "menyesal",
-    "nyesel", "kapok", "tidak akan kembali", "tidak akan repeat", "kualitas buruk", "kw", "kw1", "kw2", "kw3", "palsu", "fake",
-    "imitasi", "copasan", "aspal", "aspalan", "tiruan", "tidak original",
-    "tidak asli", "murahan", "murah meriah tapi jelek","terlalu mahal", "overpriced", "mahal banget", "mahal sekali",
-    "tidak worth", "tidak worth it", "rugi", "merugi", "kemahalan",
-    "mahal ga worth it", "mahal gak worth it","marah", "kesal", "jengkel", "kesel", "kecewa berat",
-    "frustasi", "frustrated", "stress", "stres", "bete",
-    "bad mood", "mood rusak", "sedih", "kecewa hati"
-}
+def load_lexicon_from_file(filename):
+    words = set()
+    
+    if os.path.exists(filename):
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                for line in f:
+                    word = line.strip().lower()
+                    if word:
+                        words.add(word)
+        except Exception as e:
+            print(f"Gagal membaca file {filename}: {e}")
+    else:
+        print(f"PERINGATAN: File '{filename}' tidak ditemukan di folder proyek.")
+    
+    return words
+POSITIVE_WORDS = load_lexicon_from_file("labeling/positive.txt")
+NEGATIVE_WORDS = load_lexicon_from_file("labeling/negative.txt")
 
-# 2. FUNGSI LABELING
 
-def label_sentiment(text):
-    """
-    Memberi label sentimen pada satu teks (string) yang sudah di-stemming.
-    """
+def label_sentiment(text): 
+    if not isinstance(text, str):
+        return "Netral"
+    
+    if not text.strip():
+        return "Netral"
+
     score = 0
     words = text.split() 
 
@@ -48,10 +44,6 @@ def label_sentiment(text):
         return "Netral"
 
 def label_corpus(text_list):
-    """
-    Memberi label sentimen pada banyak teks (list of strings).
-    Output: List label ["Positif", "Negatif", ...]
-    """
     labels = []
     for text in text_list:
         label = label_sentiment(text)

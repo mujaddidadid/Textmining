@@ -1,14 +1,17 @@
 import pickle
 import os
 import streamlit as st
+import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+@st.cache_resource
 def load_prediction_resources(model_path='best_model.pkl', vec_path='vectorizer.pkl'):
-    """
-    Memuat model dan vectorizer dari file pickle.
-    """
     try:
-        if not os.path.exists(model_path) or not os.path.exists(vec_path):
-            return None, None, "File model (.pkl) tidak ditemukan."
+        if not os.path.exists(model_path):
+            return None, None, f"Error: File model '{model_path}' tidak ditemukan."
+        if not os.path.exists(vec_path):
+            return None, None, f"Error: File vectorizer '{vec_path}' tidak ditemukan."
             
         with open(model_path, 'rb') as m_file:
             model = pickle.load(m_file)
@@ -17,35 +20,48 @@ def load_prediction_resources(model_path='best_model.pkl', vec_path='vectorizer.
             
         return model, vectorizer, None
     except Exception as e:
-        return None, None, str(e)
+        return None, None, f"Gagal memuat resource: {str(e)}"
+
+def convert_label(prediction):
+    label_str = str(prediction)
+    
+    clean_label = label_str.strip().capitalize()
+    
+    if clean_label == "1":
+        return "Positif"
+    elif clean_label == "0":
+        return "Negatif"
+    elif clean_label == "-1":
+        return "Negatif"
+        
+    return clean_label
 
 def perform_prediction(raw_text):
-    """
-    Logika utama: Preprocessing -> Lexicon Labeling -> ML Predicting
-    """
-    from preprocessing.preprocessing import case_folding, cleaning, tokenizing, stopword_removal, stemming
-    from labeling.lexicon_labeling import label_sentiment # Import fungsi lexicon Anda
-    
-    # 1. Load Resources (Model & Vectorizer)
-    model, vectorizer, error = load_prediction_resources()
-    if error:
-        return None, None, None, error
+    try:
+        from preprocessing.preprocessing import case_folding, cleaning, tokenizing, stopword_removal, stemming
+        from labeling.lexicon_labeling import label_sentiment 
+        
+        model, vectorizer, error = load_prediction_resources()
+        if error: return None, None, None, error
 
-    # 2. Preprocessing Tunggal (Konsisten dengan pipeline training)
-    text = case_folding(raw_text)
-    text = cleaning(text)
-    tokens = tokenizing(text)
-    tokens = stopword_removal(tokens)
-    tokens = stemming(tokens)
-    cleaned_text = " ".join(tokens)
+        text = case_folding(raw_text)
+        text = cleaning(text)
+        tokens = tokenizing(text)
+        tokens = stopword_removal(tokens)
+        tokens = stemming(tokens)
+        cleaned_text = " ".join(tokens)
 
-    # 3. Analisa Otomatis via Lexicon
-    # Memberi label berdasarkan skor kata positif/negatif
-    lexicon_result = label_sentiment(cleaned_text)
+        if not cleaned_text.strip():
+            return None, None, None, "Teks kosong setelah cleaning."
 
-    # 4. Transformasi & Prediksi via Machine Learning (Pickle)
-    vectorized_input = vectorizer.transform([cleaned_text])
-    ml_prediction = model.predict(vectorized_input)[0]
+        lexicon_result = label_sentiment(cleaned_text)
 
-    # Return: Hasil ML, Hasil Lexicon, Teks Bersih, Error
-    return ml_prediction, lexicon_result, cleaned_text, None
+        vectorized_input = vectorizer.transform([cleaned_text])
+        prediction_raw = model.predict(vectorized_input)[0]
+
+        ml_prediction = convert_label(prediction_raw)
+
+        return ml_prediction, lexicon_result, cleaned_text, None
+
+    except Exception as e:
+        return None, None, None, f"System Error: {str(e)}"
